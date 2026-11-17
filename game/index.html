@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Solmar Bay — Open-World Crime Game</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0e1a24; font-family: 'Segoe UI', Arial, sans-serif; }
+  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  #hud { position: fixed; inset: 0; pointer-events: none; color: #fff; z-index: 5; }
+  .panel { background: rgba(8, 18, 28, 0.72); border: 1px solid rgba(255,255,255,0.18); border-radius: 10px; padding: 8px 12px; }
+  #top-left { position: absolute; top: 12px; left: 12px; display: flex; flex-direction: column; gap: 8px; }
+  #health-bar { width: 210px; height: 14px; background: rgba(0,0,0,0.55); border-radius: 7px; overflow: hidden; }
+  #health-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #2ecc71, #27ae60); }
+  #health-row { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; }
+  #cash-num { font-size: 20px; font-weight: 800; color: #7dff9a; }
+  #wanted-stars { font-size: 26px; letter-spacing: 3px; color: #ffd23e; text-shadow: 0 0 8px rgba(0,0,0,0.8); }
+  #wanted-stars.hot { color: #ff5347; animation: pulse 0.7s infinite alternate; }
+  @keyframes pulse { from { transform: scale(1); } to { transform: scale(1.08); } }
+  #clock-num { font-size: 15px; font-weight: 700; }
+  #minimap-wrap { position: absolute; left: 12px; bottom: 12px; }
+  #minimap { width: 170px; height: 170px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.65); background: #0e2a3a; box-shadow: 0 0 18px rgba(0,0,0,0.6); }
+  #mission-box { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); text-align: center; max-width: 560px; }
+  #mission-title { font-size: 13px; font-weight: 800; letter-spacing: 2px; color: #ffd23e; }
+  #objective-text { font-size: 16px; font-weight: 600; margin-top: 2px; }
+  #speed { position: absolute; right: 16px; bottom: 16px; font-size: 30px; font-weight: 800; text-shadow: 0 2px 6px rgba(0,0,0,0.8); }
+  #ammo-num { position: absolute; right: 16px; bottom: 56px; font-size: 16px; font-weight: 700; text-shadow: 0 2px 4px rgba(0,0,0,0.8); }
+  #hint-text { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); font-size: 13px; opacity: 0.9; text-shadow: 0 1px 3px rgba(0,0,0,0.9); }
+  #feed { position: absolute; left: 12px; bottom: 196px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; max-width: 420px; }
+  #feed div { background: rgba(8,18,28,0.66); border-radius: 6px; padding: 4px 8px; }
+  #crosshair { position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px; display: none; }
+  #crosshair::before, #crosshair::after { content: ''; position: absolute; background: #fff; box-shadow: 0 0 3px #000; }
+  #crosshair::before { left: 10px; top: 0; width: 2px; height: 22px; }
+  #crosshair::after { left: 0; top: 10px; width: 22px; height: 2px; }
+  #banner { position: absolute; top: 22%; left: 50%; transform: translateX(-50%) scale(0.92); text-align: center; opacity: 0; transition: opacity 0.25s, transform 0.25s; }
+  #banner.show { opacity: 1; transform: translateX(-50%) scale(1); }
+  #banner-title { font-size: 34px; font-weight: 900; letter-spacing: 2px; color: #ffd23e; text-shadow: 0 3px 10px rgba(0,0,0,0.9); }
+  #banner-sub { font-size: 16px; margin-top: 4px; text-shadow: 0 2px 6px rgba(0,0,0,0.9); }
+  .overlay { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; flex-direction: column; text-align: center; background: rgba(6, 14, 22, 0.82); color: #fff; z-index: 10; pointer-events: auto; }
+  .overlay.show { display: flex; }
+  .overlay h1 { font-size: 54px; margin: 0; letter-spacing: 3px; color: #ffd23e; text-shadow: 0 4px 18px rgba(0,0,0,0.8); }
+  .overlay h2 { font-size: 20px; font-weight: 400; margin: 8px 0 20px; max-width: 640px; line-height: 1.5; }
+  .overlay .controls { font-size: 14px; line-height: 1.9; background: rgba(255,255,255,0.08); border-radius: 10px; padding: 12px 22px; margin-bottom: 22px; text-align: left; }
+  button { pointer-events: auto; cursor: pointer; font-size: 17px; font-weight: 700; padding: 12px 26px; margin: 4px; border: none; border-radius: 9px; background: #ffd23e; color: #1a1a1a; }
+  button:hover { background: #ffe27a; }
+  button.secondary { background: rgba(255,255,255,0.16); color: #fff; }
+  #end-title { font-size: 64px; color: #ff5347; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.min.js" } }
+</script>
+</head>
+<body>
+<canvas id="game" aria-label="Solmar Bay: an open-world crime game. Walk, steal cars, do missions, escape the police."></canvas>
+<p id="status" role="status" aria-live="polite"></p>
+
+<div id="hud">
+  <div id="top-left">
+    <div class="panel" id="health-row">❤️ <span id="health-bar"><span id="health-fill" style="display:block"></span></span><span id="health-num">100</span></div>
+    <div class="panel"><span id="cash-num">$50</span> &nbsp;·&nbsp; <span id="clock-num">09:12</span></div>
+    <div id="wanted-stars">☆☆☆☆☆</div>
+  </div>
+  <div id="mission-box" class="panel">
+    <div id="mission-title">SOLMAR BAY</div>
+    <div id="objective-text">Welcome to Solmar Bay</div>
+  </div>
+  <div id="minimap-wrap"><canvas id="minimap" width="170" height="170"></canvas></div>
+  <div id="feed"></div>
+  <div id="crosshair"></div>
+  <div id="banner"><div id="banner-title"></div><div id="banner-sub"></div></div>
+  <div id="ammo-num">🔫 24 / 120</div>
+  <div id="speed"></div>
+  <div id="hint-text">WASD walk · Shift run · Space jump · Click shoot · F punch · E enter car</div>
+</div>
+
+<div id="start-screen" class="overlay">
+  <h1>SOLMAR BAY</h1>
+  <h2>An open-world crime story. Lena Voss needs a driver who asks no questions.
+  Steal cars, run five jobs across the bay, and stay one step ahead of the Solmar Bay police.</h2>
+  <div class="controls">
+    <b>WASD</b> move / drive &nbsp;·&nbsp; <b>Mouse</b> look &nbsp;·&nbsp; <b>Shift</b> run &nbsp;·&nbsp; <b>Space</b> jump / brake<br>
+    <b>E</b> steal / exit car &nbsp;·&nbsp; <b>Click</b> shoot &nbsp;·&nbsp; <b>F</b> punch &nbsp;·&nbsp; <b>R</b> reload &nbsp;·&nbsp; <b>P / Esc</b> pause
+  </div>
+  <div>
+    <button id="new-game-btn">▶ NEW GAME</button>
+    <button id="continue-btn" class="secondary">↻ CONTINUE</button>
+  </div>
+  <p style="opacity:0.75;font-size:13px">Progress auto-saves after every job. All names, story and art are original.</p>
+</div>
+
+<div id="pause-screen" class="overlay">
+  <h1>PAUSED</h1>
+  <h2>Solmar Bay waits for no one — except right now.</h2>
+  <div>
+    <button id="resume-btn">▶ RESUME</button>
+    <button id="save-btn" class="secondary">💾 SAVE GAME</button>
+  </div>
+</div>
+
+<div id="end-screen" class="overlay">
+  <h1 id="end-title">BUSTED</h1>
+  <h2 id="end-text"></h2>
+  <button id="restart-btn">↻ BACK TO THE STREETS (Enter)</button>
+</div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
